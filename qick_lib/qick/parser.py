@@ -270,7 +270,7 @@ def parse_prog(file="prog.asm",outfmt="bin"):
             
         # mathi p, $ra, $rb oper imm
         if inst == 'mathi':
-            comp_re = "\s*(\d+)\s*,\s*\$(\d+)\s*,\s*\$(\d+),\s*([\+\-\*]),\s*(0?x?\-?[0-9a-fA-F]+)";
+            comp_re = "\s*(\d+)\s*,\s*\$(\d+)\s*,\s*\$(\d+)\s*,\s*([\+\-\*])\s*,\s*(0?x?\-?[0-9a-fA-F]+)";
             m = re.search(comp_re, args)
         
             # If there is a match.
@@ -515,7 +515,7 @@ def parse_prog(file="prog.asm",outfmt="bin"):
         
         # math p, $ra, $rb oper $rc
         if inst == 'math':
-            comp_re = "\s*(\d+)\s*,\s*\$(\d+)\s*,\s*\$(\d+)\s*([\+\-\*])\s*\$(\d+)";
+            comp_re = "\s*(\d+)\s*,\s*\$(\d+)\s*,\s*\$(\d+)\s*,\s*([\+\-\*]),\s*\$(\d+)";
             m = re.search(comp_re, args)
         
             # If there is a match.

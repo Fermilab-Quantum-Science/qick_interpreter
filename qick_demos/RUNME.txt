@@ -1,0 +1,2 @@
+
+PYTHONPATH=../qick_lib/ python interpreter.py 00a.asm
