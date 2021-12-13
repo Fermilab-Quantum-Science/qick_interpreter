@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from qick import qick_asm
 from qick import parser
 
@@ -36,7 +37,8 @@ class State:
         self.data_mem = np.empty(2**16)
         self.output_ch = [[] for _ in range(8)] # channels, stack, memory, registers, etc.
         qp = qick_asm.QickProgram()
-        p = parser.parse_prog(program)
+        self.program = program
+        p = parser.parse_prog(self.program)
         self.codes = { v['bin']:(k,v['type']) for k,v in qp.instructions.items() }
         self.disp = { 'I':self.decode_I, 'J1':self.decode_J, 'R':self.decode_R, 'J2':self.decode_J }
         for i,inst in enumerate(p.values()):
@@ -49,6 +51,9 @@ class State:
             self.instructions.append([i,opcode,name,typ,self.disp[typ](word)])
             #print(disp[typ](word))
         InstrAction(self)()
+
+    def get_current_instr(self):
+        return self.instructions[self.pc][2]
 
     def decode_I(self,word):
         page = ((word>>53)&0b111)
@@ -100,15 +105,27 @@ class TimedAction:
         elif self.oper == 'set':
             self.set_now(self.data)
 
+    def get_action(self):
+        return self.oper
+
+    def get_page(self):
+        return self.data[-1]
+
+    def get_output_ch(self):
+        return self.data[-2]
+
     def seti_now(self,data):
-        page = self.data.pop()
-        self.state.output_ch.append([self.state.register_file[page][data[0]]])
+        page = data.pop()
+        ch = data.pop()
+        print(page)
+        self.state.output_ch[ch] = [self.state.register_file[page][data[0]]]
     
     def set_now(self,data):
-        page = self.data.pop()
+        page = data.pop()
         print('appending')
+        ch = data.pop()
         out_data = [self.state.register_file[page][r] for r in data]
-        self.state.output_ch.append(out_data)
+        self.state.output_ch[ch] = out_data
  
 class InstrAction:
     def __init__(self, state):
@@ -140,6 +157,15 @@ class InstrAction:
             self.state.queue.sort(key=lambda y: y[0])
             print(self.state.queue)
 
+    def get_action(self):
+        return self.state.instructions[self.state.pc][2]
+
+    def get_page(self):
+        return self.state.instructions[self.state.pc][4]['page']
+
+    def get_output_ch(self):
+        return -1
+
     def cycles_for_instruction(self,instr):
         self.state.clock = self.state.clock + self.functions[instr[2]][1]
         return self.state.clock
@@ -148,6 +174,7 @@ class InstrAction:
         return self.state.register_file[info['page']][info[r]]
 
     def reg_write(self,info,r,val):
+        print(info['page'])
         self.state.register_file[info['page']][info[r]] = val
 
     def pushi(self,info):
@@ -166,8 +193,9 @@ class InstrAction:
 
     def seti(self,info):
         data = [info['rb']]
+        data.append(info['ch'])
         data.append(info['page'])
-        self.state.queue.push(self.state.offset+info['imm'], TimedAction(data, self.state))
+        self.state.queue.push(self.state.offset+info['imm'], TimedAction(['seti',data], self.state))
 
     def synci(self,info):
         self.state.offset = self.state.offset + info['imm']
@@ -224,8 +252,9 @@ class InstrAction:
     def set(self,info):
         reads = ['rb','rd','re','rf','rg']
         data = [info[r] for r in reads]
+        data.append(info['ch'])
         data.append(info['page'])
-        self.state.queue.push(int(self.state.offset + self.reg_read(info,'rc')), TimedAction(data, self.state))
+        self.state.queue.push(int(self.state.offset + self.reg_read(info,'rc')), TimedAction(['set', data], self.state))
 
     def sync(self,info):
         self.state.offset = self.state.offset + self.reg_read(info,'rc') - 1
@@ -255,20 +284,23 @@ class InstrAction:
 class Sim:
     def __init__(self):
         self.state=State()
+        self.log = []
         print(len(self.state.instructions))
 
     # assumes time in the action is an absolute time to execute instruction
     def run(self):
         i = 0
-        while self.state.pc != None:
+        while self.state.queue:
             #print(self.state.queue)
             val = self.state.queue.pop()
             if val==None: break
             time,action = val
             self.state.clock = time
             print(time)
+            self.log.append([self.state.clock,action.get_action(),self.state.output_ch,action.get_page(),action.get_output_ch()])
             action()
             i += 1
         print(i)
+        pd.DataFrame(self.log,columns=['Time','Instruction','Output Channel','Page','Channel No']).to_csv(self.state.program[:-4]+"_dataframe.csv")
 
 Sim().run()
