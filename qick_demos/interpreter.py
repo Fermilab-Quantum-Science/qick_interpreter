@@ -283,7 +283,7 @@ class InstrAction:
 
 class Sim:
     def __init__(self):
-        self.state=State()
+        self.state=State("conditional_logic.asm")
         self.log = []
         print(len(self.state.instructions))
 
