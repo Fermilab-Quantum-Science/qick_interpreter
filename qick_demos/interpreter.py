@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from qick import qick_asm
 from qick import parser
+import sys
 
 class Queue(list):
     def push(self,time,action):
@@ -98,6 +99,7 @@ class TimedAction:
         self.oper=instr[0]
         self.data = instr[1]
         self.state=state
+        self.last_instr = instr
 
     def __call__(self):
         if self.oper == 'seti':
@@ -117,12 +119,12 @@ class TimedAction:
     def seti_now(self,data):
         page = data.pop()
         ch = data.pop()
-        print(page)
+        #print(page)
         self.state.output_ch[ch] = [self.state.register_file[page][data[0]]]
     
     def set_now(self,data):
         page = data.pop()
-        print('appending')
+        #print('appending')
         ch = data.pop()
         out_data = [self.state.register_file[page][r] for r in data]
         self.state.output_ch[ch] = out_data
@@ -131,6 +133,7 @@ class InstrAction:
     def __init__(self, state):
         # since the state holds the program counter, you really don't need the instruction held here
         self.state=state
+        self.last_instr = None
         self.math_fcns = {8 : np.add, 9 : np.subtract, 10 : np.multiply}
         self.comparison_fcns = {0 : np.greater, 1 : np.greater_equal, 2 : np.less, 3 : np.less_equal, 4 : np.equal, 5 : np.not_equal}
         self.bitw_fcns = {0 : np.logical_and, 1 : np.logical_or, 2 : np.logical_xor, 4 : np.left_shift, 5 : np.right_shift}
@@ -144,7 +147,10 @@ class InstrAction:
         # Assumes that you will need the state to execute the instruction (memory, ports, channels, registers)
         # unsolved here: if the instruction is 'set' or similar timed instruction, care must be taken to 
         #   build a TimedAction for the queue and add it with the proper time
+        
         instr = self.state.instructions[self.state.pc]
+
+        self.last_instr = instr
 
         self.functions[instr[2]][0](instr[4])
 
@@ -174,7 +180,7 @@ class InstrAction:
         return self.state.register_file[info['page']][info[r]]
 
     def reg_write(self,info,r,val):
-        print(info['page'])
+        #print(info['page'])
         self.state.register_file[info['page']][info[r]] = val
 
     def pushi(self,info):
@@ -228,17 +234,18 @@ class InstrAction:
 
     def loopnz(self,info):
         counter = self.reg_read(info,'ra')
+        #print(counter)
         if counter != 0:
             self.reg_write(info,'ra',counter - 1)
-            self.pc = info['addr'] - 1
+            self.state.pc = info['addr'] - 1
 
 
 
     def condj(self,info):
-        print(info)
+        #print(info)
         cond = self.comparison_fcns[info['oper']](self.reg_read(info,'ra'),self.reg_read(info,'rb'))
         if cond:
-            self.pc = info['addr'] - 1
+            self.state.pc = info['addr'] - 1
 
 
     def end(self,info):
@@ -282,13 +289,14 @@ class InstrAction:
 
 
 class Sim:
-    def __init__(self):
-        self.state=State("conditional_logic.asm")
+    def __init__(self,p):
+        self.state=State(p)
         self.log = []
-        print(len(self.state.instructions))
+        #(len(self.state.instructions))
 
     # assumes time in the action is an absolute time to execute instruction
     def run(self):
+        seq = []
         i = 0
         while self.state.queue:
             #print(self.state.queue)
@@ -296,11 +304,12 @@ class Sim:
             if val==None: break
             time,action = val
             self.state.clock = time
-            print(time)
+            #print(time)
             self.log.append([self.state.clock,action.get_action(),self.state.output_ch,action.get_page(),action.get_output_ch()])
             action()
+            seq.append((time,action.last_instr[1]))
             i += 1
-        print(i)
+        #print(i)
         pd.DataFrame(self.log,columns=['Time','Instruction','Output Channel','Page','Channel No']).to_csv(self.state.program[:-4]+"_dataframe.csv")
 
-Sim().run()
+Sim(sys.argv[1]).run()
