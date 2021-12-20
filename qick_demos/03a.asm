@@ -22,5 +22,5 @@ LABEL:  synci 20;
         mathi 0, $15, $15, +, 1;
         memwi 0, $15, 1;
         loopnz 0, $14, @LOOP_J;
-        end ;
+        end;
 

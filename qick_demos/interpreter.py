@@ -148,6 +148,8 @@ class InstrAction:
         # unsolved here: if the instruction is 'set' or similar timed instruction, care must be taken to 
         #   build a TimedAction for the queue and add it with the proper time
         
+        if self.state.pc == None:
+            return 
         instr = self.state.instructions[self.state.pc]
 
         self.last_instr = instr
@@ -161,13 +163,19 @@ class InstrAction:
         if self.state.pc < len(self.state.instructions):
             self.state.queue.push(self.cycles_for_instruction(instr), InstrAction(self.state))
             self.state.queue.sort(key=lambda y: y[0])
-            print(self.state.queue)
+            #print(self.state.queue)
 
     def get_action(self):
-        return self.state.instructions[self.state.pc][2]
+        if self.state.pc != None:
+            return self.state.instructions[self.state.pc][2]
+        else:
+            return 'end'
 
     def get_page(self):
-        return self.state.instructions[self.state.pc][4]['page']
+        if self.state.pc != None:
+            return self.state.instructions[self.state.pc][4]['page']
+        else:
+            return 0
 
     def get_output_ch(self):
         return -1
@@ -293,6 +301,7 @@ class Sim:
         self.state=State(p)
         self.log = []
         #(len(self.state.instructions))
+        print(self.state.instructions)
 
     # assumes time in the action is an absolute time to execute instruction
     def run(self):
@@ -305,9 +314,13 @@ class Sim:
             time,action = val
             self.state.clock = time
             #print(time)
-            self.log.append([self.state.clock,action.get_action(),self.state.output_ch,action.get_page(),action.get_output_ch()])
+            #if self.state.pc !=None:
+            action_name = action.get_action()
+            #print(action_name)
+            #print(self.state.pc)
+            self.log.append([self.state.clock,action_name,self.state.output_ch,action.get_page(),action.get_output_ch()])
             action()
-            seq.append((time,action.last_instr[1]))
+            #seq.append((time,action.last_instr[1]))
             i += 1
         #print(i)
         pd.DataFrame(self.log,columns=['Time','Instruction','Output Channel','Page','Channel No']).to_csv(self.state.program[:-4]+"_dataframe.csv")

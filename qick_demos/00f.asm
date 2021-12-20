@@ -19,4 +19,4 @@ LOOP_J: regwi 0, $31, 49152;                    //out = 0b1100000000000000
         mathi 0, $15, $15, +, 1;
         memwi 0, $15, 1;
         loopnz 0, $14, @LOOP_J;
-        end ;
+        end;

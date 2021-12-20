@@ -8,7 +8,7 @@
         regwi 3, $20, 589844;                   //stdysel | mode | outsel = 0b01001 | length = 20 
         synci 200;
         regwi 0, $15, 0;
-        regwi 0, $14, 0;
+        regwi 0, $14, 2;
 LOOP_J: regwi 0, $31, 49152;                    //out = 0b1100000000000000
         seti 0, 0, $31, 100;                    //ch =0 out = $31 @t = 0
         regwi 0, $31, 0;                        //out = 0b0000000000000000
@@ -20,5 +20,5 @@ LOOP_J: regwi 0, $31, 49152;                    //out = 0b1100000000000000
         mathi 0, $15, $15, +, 1;
         memwi 0, $15, 1;
         loopnz 0, $14, @LOOP_J;
-        end ;
+        end;
 
