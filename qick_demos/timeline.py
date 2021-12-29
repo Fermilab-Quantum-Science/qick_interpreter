@@ -2,6 +2,7 @@ import pandas as pd
 from pandas.plotting import table
 import matplotlib.pyplot as plt
 from matplotlib.widgets import RangeSlider
+from ast import literal_eval
 #%matplotlib widget
 #import plotly.graph_objects as go
 #import plotly.express as px
@@ -21,11 +22,20 @@ class timeline:
         Page = np.array(self.dataframe['Page'])
         Channels = np.array(self.dataframe['Channel No'])
         levels = []
+        lengths = []
+        for i,output in enumerate(Output_channel):
+            Output_channel[i] = literal_eval(output)
         for i,channel in enumerate(Channels):
-            if channel == -1:
-                levels.append(Page[i])
-            else:
+            if channel != -1:
                 levels.append(channel+12)
+                if len(Output_channel[i][channel]) == 5:
+                    lengths.append(int(format(Output_channel[i][channel][3],"b"))&0b111111111111)
+                else:
+                    lengths.append(0)
+                    #print(max(Output_channel[i][channel])&0b1111111111111111)
+            else:
+                lengths.append(0)
+                levels.append(Page[i])
         fig, ax = plt.subplots(figsize=(8.8, 5), constrained_layout=True)
         ax.set(title="Timeline")
         plt.subplots_adjust(bottom=0.25)
@@ -41,10 +51,14 @@ class timeline:
                 ax.plot(Times[i],levels[i],marker='o',color='k',markerfacecolor='w')
 
         for i in range(8):
-            ax.hlines(i,-20,max(Times)+2,color='k')
+            ax.hlines(i,-20,max(Times+lengths)+2,color='k')
             
         for i in range(12,20):
-            ax.hlines(i,-20,max(Times)+2,color='b')
+            ax.hlines(i,-20,max(Times+lengths)+2,color='b')
+            
+        for i,out in enumerate(lengths):
+            if out > 0:
+                ax.hlines(levels[i],Times[i],Times[i]+out,color="red")
 
         # annotate lines
         for d, l, r in zip(Times, Page, Instructions):
@@ -53,7 +67,7 @@ class timeline:
                 verticalalignment='center',
                rotation=90,size=6)
         slider_ax = plt.axes([0.20, 0.1, 0.60, 0.03])
-        slider = RangeSlider(slider_ax, "Timestep Range", -20, max(Times)+2,valinit=(-20,max(Times)+2))
+        slider = RangeSlider(slider_ax, "Threshold", -20, max(Times+lengths)+2,valinit=(-20,max(Times+lengths)+2))
         print(slider.val)
         print(slider.val[1])
         ax.set_xlim(slider.val[0],slider.val[1])
