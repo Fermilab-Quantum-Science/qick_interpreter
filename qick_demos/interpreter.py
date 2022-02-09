@@ -33,7 +33,7 @@ class State:
         self.instructions = []
         self.timed_instructions = []
         self.stack = [[] for _ in range(8)]
-        self.register_file = np.empty((8,32),dtype=np.uint) 
+        self.register_file = np.zeros((8,32)) 
         self.ext_port=[]
         self.data_mem = np.empty(2**16)
         self.output_ch = [[] for _ in range(8)] # channels, stack, memory, registers, etc.
@@ -50,7 +50,11 @@ class State:
             typ = self.codes[opcode][1]
             #print(opcode,name,typ,word)
             self.instructions.append([i,opcode,name,typ,self.disp[typ](word)])
-            #print(disp[typ](word))
+            if name == 'set':
+                #print(self.disp[typ](word))
+                pass
+        for inst in self.instructions:
+            print(inst)
         InstrAction(self)()
 
     def get_current_instr(self):
@@ -63,7 +67,8 @@ class State:
         ra   = ((word>>41)&0b11111)
         rb   = ((word>>36)&0b11111)
         rc   = ((word>>31)&0b11111)
-        imm  = ((word>>0)&0b1111111111111111)
+        #junk = ((word>>16)&0b1111111111111111)
+        imm  = ((word>>0)&0b11111111111111111111111111111111)
 
 
         return {'page':page,'ch':ch,'oper':oper,'ra':ra,'rb':rb,'rc':rc,'imm':imm}
@@ -127,6 +132,7 @@ class TimedAction:
         #print('appending')
         ch = data.pop()
         out_data = [self.state.register_file[page][r] for r in data]
+        #print(out_data)
         self.state.output_ch[ch] = out_data
  
 class InstrAction:
@@ -237,6 +243,7 @@ class InstrAction:
         
 
     def regwi(self,info):
+        print(info['imm'])
         self.reg_write(info,'ra',info['imm'])
         
 
@@ -265,10 +272,12 @@ class InstrAction:
         self.reg_write(info,'ra',math_val)
 
     def set(self,info):
+        #print(info)
         reads = ['rb','rd','re','rf','rg']
         data = [info[r] for r in reads]
         data.append(info['ch'])
         data.append(info['page'])
+        #print(data)
         self.state.queue.push(int(self.state.offset + self.reg_read(info,'rc')), TimedAction(['set', data], self.state))
 
     def sync(self,info):
@@ -301,12 +310,13 @@ class Sim:
         self.state=State(p)
         self.log = []
         #(len(self.state.instructions))
-        print(self.state.instructions)
+        #print(self.state.instructions)
 
     # assumes time in the action is an absolute time to execute instruction
     def run(self):
         seq = []
         i = 0
+        print(self.state.register_file[3])
         while self.state.queue:
             #print(self.state.queue)
             val = self.state.queue.pop()
@@ -323,6 +333,9 @@ class Sim:
             #seq.append((time,action.last_instr[1]))
             i += 1
         #print(i)
+        #for i in range(16,22):
+        #    print(self.state.register_file[3][i])
+        print(self.state.register_file[3])
         pd.DataFrame(self.log,columns=['Time','Instruction','Output Channel','Page','Channel No']).to_csv(self.state.program[:-4]+"_dataframe.csv")
 
 Sim(sys.argv[1]).run()

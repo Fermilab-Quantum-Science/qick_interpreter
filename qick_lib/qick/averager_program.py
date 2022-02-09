@@ -89,6 +89,7 @@ class AveragerProgram(QickProgram):
         if load_pulses: 
             self.load_pulses(soc)
         
+        
         #Configure the readout down converters
         for readout,adc_freq in zip(soc.readouts,self.cfg["adc_freqs"]):
             readout.set_out(sel="product")
@@ -251,49 +252,52 @@ class AveragerProgram(QickProgram):
         
         #load pulses onto soc
         if load_pulses: 
-            self.load_pulses(soc)
+            pulses = self.load_pulses(soc)
         
-        #configure the adcs
-        for readout,adc_freq in zip(soc.readouts,self.cfg["adc_freqs"]):
-            readout.set_out(sel="product")
-            readout.set_freq(adc_freq)
-        
+        try:
+            #configure the adcs
+            for readout,adc_freq in zip(soc.readouts,self.cfg["adc_freqs"]):
+                readout.set_out(sel="product")
+                readout.set_freq(adc_freq)
+            
 
-        soft_avgs=self.cfg["soft_avgs"]        
+            soft_avgs=self.cfg["soft_avgs"]        
 
-        di_avg0=np.zeros(self.cfg["adc_lengths"][0])
-        dq_avg0=np.zeros(self.cfg["adc_lengths"][0])
-        di_avg1=np.zeros(self.cfg["adc_lengths"][1])
-        dq_avg1=np.zeros(self.cfg["adc_lengths"][1])
-        
-        #for each soft average stop the processor, reload the program, run and average decimated data
-        for ii in tqdm(range(soft_avgs),disable=not progress):
-            soc.tproc.stop()
-            # Configure and enable buffer capture.
-            for avg_buf,adc_length in zip(soc.avg_bufs, self.cfg["adc_lengths"]):
-                avg_buf.config_buf(address=0,length=adc_length)
-                avg_buf.enable_buf()
-                avg_buf.config_avg(address=0,length=adc_length)
-                avg_buf.enable_avg()
+            di_avg0=np.zeros(self.cfg["adc_lengths"][0])
+            dq_avg0=np.zeros(self.cfg["adc_lengths"][0])
+            di_avg1=np.zeros(self.cfg["adc_lengths"][1])
+            dq_avg1=np.zeros(self.cfg["adc_lengths"][1])
+            
+            #for each soft average stop the processor, reload the program, run and average decimated data
+            for ii in tqdm(range(soft_avgs),disable=not progress):
+                soc.tproc.stop()
+                # Configure and enable buffer capture.
+                for avg_buf,adc_length in zip(soc.avg_bufs, self.cfg["adc_lengths"]):
+                    avg_buf.config_buf(address=0,length=adc_length)
+                    avg_buf.enable_buf()
+                    avg_buf.config_avg(address=0,length=adc_length)
+                    avg_buf.enable_avg()
 
-            soc.tproc.single_write(addr= 1,data=0)   #make sure count variable is reset to 0       
-            soc.tproc.load_qick_program(self, debug=debug)
-        
-            soc.tproc.start() #runs the assembly program
+                soc.tproc.single_write(addr= 1,data=0)   #make sure count variable is reset to 0       
+                soc.tproc.load_qick_program(self, debug=debug)
+            
+                soc.tproc.start() #runs the assembly program
 
-            count=0
-            while count<1:
-                count = soc.tproc.single_read(addr= 1)
+                count=0
+                while count<1:
+                    count = soc.tproc.single_read(addr= 1)
+                    
+                di0,dq0 = soc.get_decimated(ch=0, address=0, length=self.cfg["adc_lengths"][0])
+                di1,dq1 = soc.get_decimated(ch=1, address=0, length=self.cfg["adc_lengths"][1])
                 
-            di0,dq0 = soc.get_decimated(ch=0, address=0, length=self.cfg["adc_lengths"][0])
-            di1,dq1 = soc.get_decimated(ch=1, address=0, length=self.cfg["adc_lengths"][1])
-            
-            di_avg0+=di0
-            dq_avg0+=dq0
-            di_avg1+=di1
-            dq_avg1+=dq1
-            
-        return np.array([di_avg0,dq_avg0])/soft_avgs,np.array([di_avg1,dq_avg1])/soft_avgs
+                di_avg0+=di0
+                dq_avg0+=dq0
+                di_avg1+=di1
+                dq_avg1+=dq1
+                
+            return np.array([di_avg0,dq_avg0])/soft_avgs,np.array([di_avg1,dq_avg1])/soft_avgs
+        except:
+            return pulses
     
 class RAveragerProgram(QickProgram):
     """

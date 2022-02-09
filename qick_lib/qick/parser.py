@@ -405,7 +405,7 @@ def parse_prog(file="prog.asm",outfmt="bin"):
                 imm  = m.group(3)
             
                 # Add entry into structure.
-                progList[e]['inst_parse'] = "I-type:memwi:" + page + ":0:0:0:0:" + r + ":" + imm
+                progList[e]['inst_parse'] = "I-type:memwi:" + page + ":0:0:" + r + ":0:0:" + imm
         
             # Error: bad instruction format.
             else:

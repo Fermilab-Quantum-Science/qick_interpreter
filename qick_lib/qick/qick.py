@@ -1,17 +1,30 @@
 """
 The lower-level driver for the QICK library. Contains classes for interfacing with the SoC.
 """
-import os
-from pynq import Overlay, allocate
-import xrfclk
-import xrfdc
-import numpy as np
-from pynq import Xlnk
-from pynq import Overlay
-from pynq.lib import AxiGPIO
-import time
-from .parser import *
-from . import bitfile_path
+try:
+    import os
+    from pynq import Overlay, allocate
+    import xrfclk
+    import xrfdc
+    import numpy as np
+    from pynq import Xlnk
+    from pynq import Overlay
+    from pynq.lib import AxiGPIO
+    import time
+    from .parser import *
+    from . import bitfile_path
+except:
+    import os
+    from pynq import Overlay, allocate
+    #import xrfclk
+    #import xrfdc
+    import numpy as np
+    #from pynq import Xlnk
+    from pynq import Overlay
+    from pynq.lib import AxiGPIO
+    import time
+    from .parser import *
+    from . import bitfile_path
 
 # Some support functions
 def format_buffer(buff):
@@ -926,62 +939,65 @@ class QickSoc(Overlay):
         Constructor method
         """
         # Load bitstream.
-        if bitfile==None:
-            super().__init__(bitfile_path(), ignore_version=ignore_version, **kwargs)
-        else:
-            super().__init__(bitfile, ignore_version=ignore_version, **kwargs)
-        # Configure PLLs if requested.
-        if force_init_clks:
-            self.set_all_clks()
-        else:
-            rf=self.usp_rf_data_converter_0
-            dac_tile = rf.dac_tiles[1] # DAC 228: 0, DAC 229: 1
-            DAC_PLL=dac_tile.PLLLockStatus
-            adc_tile = rf.adc_tiles[0] # ADC 224: 0, ADC 225: 1, ADC 226: 2, ADC 227: 3
-            ADC_PLL=adc_tile.PLLLockStatus
-            
-            if not (DAC_PLL==2 and ADC_PLL==2):
+        try:
+            if bitfile==None:
+                super().__init__(bitfile_path(), ignore_version=ignore_version, **kwargs)
+            else:
+                super().__init__(bitfile, ignore_version=ignore_version, **kwargs)
+            # Configure PLLs if requested.
+            if force_init_clks:
                 self.set_all_clks()
+            else:
+                rf=self.usp_rf_data_converter_0
+                dac_tile = rf.dac_tiles[1] # DAC 228: 0, DAC 229: 1
+                DAC_PLL=dac_tile.PLLLockStatus
+                adc_tile = rf.adc_tiles[0] # ADC 224: 0, ADC 225: 1, ADC 226: 2, ADC 227: 3
+                ADC_PLL=adc_tile.PLLLockStatus
                 
-        # AXIS Switch to upload samples into Signal Generators.
-        self.switch_gen = AxisSwitch(self.axis_switch_gen, nslave=1, nmaster=7)
-        
-        # AXIS Switch to read samples from averager.
-        self.switch_avg = AxisSwitch(self.axis_switch_avg, nslave=2, nmaster=1)
-        
-        # AXIS Switch to read samples from buffer.
-        self.switch_buf = AxisSwitch(self.axis_switch_buf, nslave=2, nmaster=1)
-        
-        # Signal generators.
-        self.gens = []
-        self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_0, self.axi_dma_gen, self.switch_gen, 0))
-        self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_1, self.axi_dma_gen, self.switch_gen, 1))
-        self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_2, self.axi_dma_gen, self.switch_gen, 2))
-        self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_3, self.axi_dma_gen, self.switch_gen, 3))
-        self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_4, self.axi_dma_gen, self.switch_gen, 4))
-        self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_5, self.axi_dma_gen, self.switch_gen, 5))
-        self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_6, self.axi_dma_gen, self.switch_gen, 6))
-        
-        # Readout blocks.
-        self.readouts = []
-        self.readouts.append(AxisReadoutV2(self.axis_readout_v2_0, self.fs_adc))
-        self.readouts.append(AxisReadoutV2(self.axis_readout_v2_1, self.fs_adc))
-        
-        # Average + Buffer blocks.
-        self.avg_bufs = []
-        self.avg_bufs.append(AxisAvgBuffer(self.axis_avg_buffer_0, 
-                                           self.axi_dma_avg, self.switch_avg,
-                                           self.axi_dma_buf, self.switch_buf,
-                                           0))
-        
-        self.avg_bufs.append(AxisAvgBuffer(self.axis_avg_buffer_1, 
-                                           self.axi_dma_avg, self.switch_avg,
-                                           self.axi_dma_buf, self.switch_buf,
-                                           1))        
-        
-        
-        # tProcessor, 64-bit instruction, 32-bit registes, x8 channels.
-        self.tproc  = AxisTProc64x32_x8(self.axis_tproc64x32_x8_0, self.axi_bram_ctrl_0, self.axi_dma_tproc)
+                if not (DAC_PLL==2 and ADC_PLL==2):
+                    self.set_all_clks()
+                    
+            # AXIS Switch to upload samples into Signal Generators.
+            self.switch_gen = AxisSwitch(self.axis_switch_gen, nslave=1, nmaster=7)
+            
+            # AXIS Switch to read samples from averager.
+            self.switch_avg = AxisSwitch(self.axis_switch_avg, nslave=2, nmaster=1)
+            
+            # AXIS Switch to read samples from buffer.
+            self.switch_buf = AxisSwitch(self.axis_switch_buf, nslave=2, nmaster=1)
+            
+            # Signal generators.
+            self.gens = []
+            self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_0, self.axi_dma_gen, self.switch_gen, 0))
+            self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_1, self.axi_dma_gen, self.switch_gen, 1))
+            self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_2, self.axi_dma_gen, self.switch_gen, 2))
+            self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_3, self.axi_dma_gen, self.switch_gen, 3))
+            self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_4, self.axi_dma_gen, self.switch_gen, 4))
+            self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_5, self.axi_dma_gen, self.switch_gen, 5))
+            self.gens.append(AxisSignalGenV4(self.axis_signal_gen_v4_6, self.axi_dma_gen, self.switch_gen, 6))
+            
+            # Readout blocks.
+            self.readouts = []
+            self.readouts.append(AxisReadoutV2(self.axis_readout_v2_0, self.fs_adc))
+            self.readouts.append(AxisReadoutV2(self.axis_readout_v2_1, self.fs_adc))
+            
+            # Average + Buffer blocks.
+            self.avg_bufs = []
+            self.avg_bufs.append(AxisAvgBuffer(self.axis_avg_buffer_0, 
+                                            self.axi_dma_avg, self.switch_avg,
+                                            self.axi_dma_buf, self.switch_buf,
+                                            0))
+            
+            self.avg_bufs.append(AxisAvgBuffer(self.axis_avg_buffer_1, 
+                                            self.axi_dma_avg, self.switch_avg,
+                                            self.axi_dma_buf, self.switch_buf,
+                                            1))        
+            
+            
+            # tProcessor, 64-bit instruction, 32-bit registes, x8 channels.
+            self.tproc  = AxisTProc64x32_x8(self.axis_tproc64x32_x8_0, self.axi_bram_ctrl_0, self.axi_dma_tproc)
+        except:
+            pass
         
     def set_all_clks(self):
         """
@@ -1055,11 +1071,14 @@ class QickSoc(Overlay):
         :return: 'True' or '1' if the task was completed successfully
         :rtype: bool
         """
-        ch_info={1: (0,0), 2: (0,1), 3: (0,2), 4: (1,0), 5: (1,1), 6: (1, 2), 7: (1,3)}
-    
-        rf=self.usp_rf_data_converter_0
-        tile, channel = ch_info[ch]
-        dac_block=rf.dac_tiles[tile].blocks[channel]        
-        dac_block.NyquistZone=nqz
-        return dac_block.NyquistZone
+        try:
+            ch_info={1: (0,0), 2: (0,1), 3: (0,2), 4: (1,0), 5: (1,1), 6: (1, 2), 7: (1,3)}
+        
+            rf=self.usp_rf_data_converter_0
+            tile, channel = ch_info[ch]
+            dac_block=rf.dac_tiles[tile].blocks[channel]        
+            dac_block.NyquistZone=nqz
+            return dac_block.NyquistZone
+        except:
+            return None
 

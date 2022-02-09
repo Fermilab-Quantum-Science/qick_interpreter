@@ -212,6 +212,7 @@ class QickProgram:
             self.channels[ch]["pulses"][name]={"addr":0, "length":length, "style": style}
         elif style=="poly":
             pass
+        print(self.channels)
         
     def load_pulses(self, soc):
         """
@@ -220,12 +221,28 @@ class QickProgram:
         :param soc: Qick object
         :type soc: Qick object
         """
-        for ch,gen in zip(self.channels.keys(),soc.gens):
-            for name,pulse in self.channels[ch]['pulses'].items():
-                if pulse['style'] != 'const':
-                    idata = pulse['idata'].astype(np.int16)
-                    qdata = pulse['qdata'].astype(np.int16)
-                    gen.load(xin_i=idata, xin_q=qdata, addr=pulse['addr'])
+        try:
+            for ch,gen in zip(self.channels.keys(),soc.gens):
+                for name,pulse in self.channels[ch]['pulses'].items():
+                    if pulse['style'] != 'const':
+                        idata = pulse['idata'].astype(np.int16)
+                        qdata = pulse['qdata'].astype(np.int16)
+                        gen.load(xin_i=idata, xin_q=qdata, addr=pulse['addr'])
+        except:
+            pulses = []
+            for ch in self.channels.keys():
+                for name,pulse in self.channels[ch]['pulses'].items():
+                    print(pulse)
+                    if pulse['style'] != 'const':
+                        idata = pulse['idata'].astype(np.int16)
+                        qdata = pulse['qdata'].astype(np.int16)
+                        print(idata)
+                        print(qdata)
+                        pulses.append([pulse['addr'], idata, qdata])
+                    elif pulse['style'] == 'const':
+                        length = pulse['length']
+                        pulses.append([pulse['addr'],length])
+            return pulses
 
     def ch_page(self, ch):
         """
