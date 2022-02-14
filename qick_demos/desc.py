@@ -45,7 +45,7 @@ class Dummy:
 
     def __getattr__(self,name):
         print("gettattr",name)
-        x = types.MethodType(dummy, self)
+        #x = types.MethodType(dummy, self)
         setattr(self,name, self.dumb) #x)
         return self.dumb
 
@@ -61,6 +61,10 @@ f.foo()
 f.foo()
 f.blob()
 f.blob()
+print(f.__dict__)
+
+f.val = 5
+print(f.val)
 print(f.__dict__)
 
 
