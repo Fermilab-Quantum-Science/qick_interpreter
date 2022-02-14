@@ -58,27 +58,16 @@ class Dummy:
         return types.MethodType(dummy, self)
 
 # try it out
-f = Dummy()
-f.boo
-f.glump
-f.foo()
-f.foo()
-f.blob()
-f.blob()
-print(f.__dict__)
+if __name__ == "__main__":
+    f = Dummy()
+    f.boo
+    f.glump
+    f.foo()
+    f.foo()
+    f.blob()
+    f.blob()
+    print(f.__dict__)
 
-f.val = 5
-print(f.val)
-print(f.__dict__)
-
-done = False
-
-while done==False:
-    try:
-        plt = Plot()
-        plt.x()
-        done=True
-    except NameError as q:
-        print("yuck!",q.args)
-        Plot = Dummy
-        
+    f.val = 5
+    print(f.val)
+    print(f.__dict__)
