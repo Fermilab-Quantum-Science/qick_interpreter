@@ -2,6 +2,7 @@
 import types
 # from types import MethodType
 
+# this is an example from the manual on what MethodType does
 class MethodType:
     "Emulate PyMethod_Type in Objects/classobject.c"
 
@@ -16,9 +17,11 @@ class MethodType:
         obj = self.__self__
         return func(obj, *args, **kwargs)
 
+# my dummy method
 def dummy(obj,*args,**kwargs):
     print("dummy",obj)
 
+# my dummy class used as the installed method
 class dummy2:
     def __call__(self,*args,**kwargs):
         print("dummy2",self)
@@ -26,6 +29,7 @@ class dummy2:
         print("dummy2 setattr")
         setattr(self,name,value)
 
+# the class that is used to stand in for anything
 class Dummy:
 
     def __init__(self):
@@ -53,7 +57,7 @@ class Dummy:
         print("gettattribute",name)
         return types.MethodType(dummy, self)
 
-
+# try it out
 f = Dummy()
 f.boo
 f.glump
@@ -67,5 +71,14 @@ f.val = 5
 print(f.val)
 print(f.__dict__)
 
+done = False
 
+while done==False:
+    try:
+        plt = Plot()
+        plt.x()
+        done=True
+    except NameError as q:
+        print("yuck!",q.args)
+        Plot = Dummy
         
