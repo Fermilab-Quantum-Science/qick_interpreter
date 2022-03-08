@@ -1,0 +1,72 @@
+
+Registers:
+Time,Page, R0, R1, ... R31
+
+Output Channels:
+Time,Page, OutputWord, F1, F2, ... F6
+
+Instructions:
+'I',Time,Page,Channel,Oper, a,b,c, imm
+'J',Time,Page, Oper, a,b,c, addr
+'R',Time,Page,Channel,Oper, a,b,c,d,e,f,g,h
+'-',Time,Page,Channel,Oper, reg, imm
+
+What's most important to show for registers?
+A before and after snapshop is probably best.  Tagged with
+instruction ID that caused the record to appear.
+
+How should memory mods should be recorded?  
+Individual writes might be easiest.  Putting together the full
+memory image will require a starting point (all zeros) and then
+adding changes until the point in time that is of interest.
+
+What's most important to show with the instruction? 
+With an instruction ID (instance, not type), you should be 
+be able to look at the register values at that point in 
+the history.  Most interesting to see in the history record
+is probably immediate values, addresses being acted on, and
+the register number and value at that time.
+
+Most instructions act on 1, 2, or 3 registers, and an address 
+or immediate value. Perhaps many can be done in a single 
+record (one line for one instruction ID).   It might make more
+sense for the set command to have it produce several record, or
+one per register along with the value behind it.  The
+arrangement with 2 or more records allowed would require
+identifying the register as 'a', 'b', 'c', or so forth.
+
+So here is proposed format one.  
+IID is instruction ID.
+Snapshop is 'b' for before or 'a' for after
+
+Registers (all register snapshot)
+Time, IID, Page, Snapshot, R0, R1, ... R31
+
+Memory (modifications only)
+Time, IID, Page, Address, Value
+
+Instructions 
+Time, IID, Page, Oper, Channel, Reg, Addr, Value, Args
+
+For the Instructions, this does not quite work for set and jump.
+For set, it would require multiple IID lines, one for each
+register. Here Reg, Addr, Value are the major things that are 
+acted upon.  Reg is the register number, Addr is memory location
+where data is written to or read from, and Value is the either the
+immediate value in the instruction or the value in the memory location
+or register that is being accessed.
+Maybe the answer it to add a json field at the end with
+all the instruction info in it (called Args).  It would look
+like this:
+
+20, 113, 3, "set", 4, 21,0, '"Args":{"16":"69905067",
+  "17":"234","18":"45","19":"562","20":"9878"}"
+
+Only the time register would be included in the Ref/Addr/Value fields.
+
+It might be easier to just use the IID and look up the memory and 
+register changes cause by an IID.
+
+Easiest format for instructions is:
+Time, IID, Page, Oper, Channel, Args
+
