@@ -128,7 +128,7 @@ class QickProgram:
                     'waiti': {'type':"I", 'bin': 0b00010101, 'fmt': ((0,50),(1,0)), 'repr': "{0}, {1}"},
                     'bitwi': {'type':"I", 'bin': 0b00010110, 'fmt': ((0,53),(3,46), (1,41), (2, 36), (4,0) ), 'repr': "{0}, ${1}, ${2} {3} {4}"},
                     'memri': {'type':"I", 'bin': 0b00010111, 'fmt': ((0,53),(1,41), (2, 0)), 'repr': "{0}, ${1}, {2}"},
-                    'memwi': {'type':"I", 'bin': 0b00011000, 'fmt': ((0,53),(1,31), (2,0)), 'repr': "{0}, ${1}, {2}"},
+                    'memwi': {'type':"I", 'bin': 0b00011000, 'fmt': ((0,53),(1,41), (2,0)), 'repr': "{0}, ${1}, {2}"},
                     'regwi': {'type':"I", 'bin': 0b00011001, 'fmt': ((0,53),(1,41), (2,0)), 'repr': "{0}, ${1}, {2}"},
                     'setbi': {'type':"I", 'bin': 0b00011010, 'fmt': ((0,53),(1,41), (2,0)), 'repr': "{0}, ${1}, {2}"},
 
@@ -212,7 +212,7 @@ class QickProgram:
             self.channels[ch]["pulses"][name]={"addr":0, "length":length, "style": style}
         elif style=="poly":
             pass
-        print(self.channels)
+        #print("self.channels=",self.channels)
         
     def load_pulses(self, soc):
         """
@@ -232,12 +232,12 @@ class QickProgram:
             pulses = []
             for ch in self.channels.keys():
                 for name,pulse in self.channels[ch]['pulses'].items():
-                    print(pulse)
+                    print("except pulses=",pulse)
                     if pulse['style'] != 'const':
                         idata = pulse['idata'].astype(np.int16)
                         qdata = pulse['qdata'].astype(np.int16)
-                        print(idata)
-                        print(qdata)
+                        print("idata=",idata)
+                        print("qdata=",qdata)
                         pulses.append([pulse['addr'], idata, qdata])
                     elif pulse['style'] == 'const':
                         length = pulse['length']
@@ -627,8 +627,10 @@ class QickProgram:
         if val> 2**31:
             raise RuntimeError(f"Immediate values are only 31 bits {val} > 2**31")
         if val <0:
+            #print(f'immediate: negative {val}')
             return 2**31+val
         else:
+            #print(f'immediate: {val}')
             return val
         
     def compile_instruction(self,inst, debug = False):
@@ -669,9 +671,10 @@ class QickProgram:
             args[2]=self.__class__.op_codes[inst['args'][2]] #get read op code
             
         mcode = (idef['bin'] << 56)
-        #print(inst)
+        # print(inst,idef)
         for field in fmt:
             mcode|=(args[field[0]] << field[1])
+            # print(f'fmt: {fmt}, mcode: {mcode}')
             
         if inst['name'] == 'loopnz':
             mcode|= (0b1000 << 46)

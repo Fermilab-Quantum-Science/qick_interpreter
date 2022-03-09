@@ -1,8 +1,12 @@
+
 import numpy as np
 import pandas as pd
+import sys
+import types
+
 from qick import qick_asm
 from qick import parser
-import sys
+from qick.qick_asm import QickProgram
 
 class Queue(list):
     def push(self,time,action):
@@ -24,8 +28,31 @@ class Action:
     def __call__(self):
         self.func()
 
+def mybin(mc):
+    return format(mc, '#066b')
+
 class State:
     def __init__(self,program="01_phase_calibration.asm"):
+
+        self.program = program
+        #print(type(program))
+        p=None
+        use_me=None
+
+        if isinstance(program,str):
+            print("using string version")
+            p = parser.parse_prog(self.program)
+            #print(f"Debug str: p[18] = {type(p[18])}, {p[18]}, {int(p[18],2)}")
+            use_me = p.values()
+        elif isinstance(program,QickProgram):
+            print("using qick program version")
+            p = program.compile(debug=False)
+            #print(f"Debug pro: p[18] = {p[18]}, {bin(p[18])}")
+            use_me = [mybin(i) for i in p]
+
+        self.use_me = use_me
+        #print(use_me)
+
         self.clock=0
         self.offset=0
         self.pc=0
@@ -35,26 +62,29 @@ class State:
         self.stack = [[] for _ in range(8)]
         self.register_file = np.zeros((8,32)) 
         self.ext_port=[]
+        # JBK - there needs to be one mem block per channel
         self.data_mem = np.empty(2**16)
         self.output_ch = [[] for _ in range(8)] # channels, stack, memory, registers, etc.
         qp = qick_asm.QickProgram()
-        self.program = program
-        p = parser.parse_prog(self.program)
         self.codes = { v['bin']:(k,v['type']) for k,v in qp.instructions.items() }
         self.disp = { 'I':self.decode_I, 'J1':self.decode_J, 'R':self.decode_R, 'J2':self.decode_J }
-        for i,inst in enumerate(p.values()):
-            #print(inst)
+
+        # JBK - fix the next loop so it works with the list of machine instructions
+        for i,inst in enumerate(use_me):
+            #print(inst,type(inst))
             word = int(inst,2)
             opcode = (word>>56)&0xff
             name = self.codes[opcode][0]
             typ = self.codes[opcode][1]
             #print(opcode,name,typ,word)
             self.instructions.append([i,opcode,name,typ,self.disp[typ](word)])
+            
             if name == 'set':
                 #print(self.disp[typ](word))
                 pass
-        for inst in self.instructions:
-            print(inst)
+
+        #for inst in self.instructions:
+        #    print(inst)
         InstrAction(self)()
 
     def get_current_instr(self):
@@ -195,6 +225,7 @@ class InstrAction:
 
     def reg_write(self,info,r,val):
         #print(info['page'])
+        # JBK - this is where we can record the register transactions
         self.state.register_file[info['page']][info[r]] = val
 
     def pushi(self,info):
@@ -239,11 +270,12 @@ class InstrAction:
         
 
     def memwi(self,info):
+        # JBK - this needs to be recorded as a memory transaction
         self.state.data_mem[info['imm']] = self.reg_read(info,'ra')
         
 
     def regwi(self,info):
-        print(info['imm'])
+        #print(info['imm'])
         self.reg_write(info,'ra',info['imm'])
         
 
@@ -264,7 +296,8 @@ class InstrAction:
 
 
     def end(self,info):
-        print("Done")
+        #print("Done")
+        pass
         
 
     def math(self,info):
@@ -299,43 +332,91 @@ class InstrAction:
         self.reg_write(info,'ra',val)
 
     def memr(self,info):
-        self.reg_write(info,'ra',self.reg_read(info,'rb'))
+        # self.reg_write(info,'ra',self.reg_read(info,'rb'))
+        self.reg_write(info,self.state.data_mem[self.reg_read(info,'rb')])
 
+    # JBK - is this one supposed to modify memory or just registers?
     def memw(self,info):
-        self.reg_write(info,'rb',self.reg_read(info,'ra'))
+        # self.reg_write(info,'rb',self.reg_read(info,'ra'))
+        self.state.data_mem[self.reg_read(info,'rb')] = self.reg_read(info,'ra')
 
 
-class Sim:
-    def __init__(self,p):
-        self.state=State(p)
-        self.log = []
-        #(len(self.state.instructions))
-        #print(self.state.instructions)
+def retrieve_pulses(self):
+    pulses = []
+    for ch in self.channels.keys():
+        for name,pulse in self.channels[ch]['pulses'].items():
+            #print("except pulses=",pulse)
+            if pulse['style'] != 'const':
+                idata = pulse['idata'].astype(np.int16)
+                qdata = pulse['qdata'].astype(np.int16)
+                #print("idata=",idata)
+                #print("qdata=",qdata)
+                pulses.append([ch,pulse['style'],pulse['addr'], idata, qdata])
+            elif pulse['style'] == 'const':
+                length = pulse['length']
+                pulses.append([ch,pulse['style'],pulse['addr'],length])
+    return pulses
 
-    # assumes time in the action is an absolute time to execute instruction
-    def run(self):
-        seq = []
-        i = 0
-        print(self.state.register_file[3])
-        while self.state.queue:
-            #print(self.state.queue)
-            val = self.state.queue.pop()
-            if val==None: break
-            time,action = val
-            self.state.clock = time
-            #print(time)
-            #if self.state.pc !=None:
-            action_name = action.get_action()
-            #print(action_name)
-            #print(self.state.pc)
-            self.log.append([self.state.clock,action_name,self.state.output_ch,action.get_page(),action.get_output_ch()])
-            action()
-            #seq.append((time,action.last_instr[1]))
-            i += 1
-        #print(i)
-        #for i in range(16,22):
-        #    print(self.state.register_file[3][i])
-        print(self.state.register_file[3])
-        pd.DataFrame(self.log,columns=['Time','Instruction','Output Channel','Page','Channel No']).to_csv(self.state.program[:-4]+"_dataframe.csv")
+# I think Sim can just be a function that takes a program and produces the
+# the State object, the log, and the results.
+# Sim modifies the program: it adds pulse extraction without loading
+# The results should include the loaded memory blocks, the asm, and
+# the simulating of the asm execution.
 
-Sim(sys.argv[1]).run()
+
+# assumes time in the action is an absolute time to execute instruction
+def simulate_run(state, pulses=None):
+    log = []
+    seq = []
+    i = 0
+    # print(state.register_file[3])
+
+    while state.queue:
+        #print(state.queue)
+        val = state.queue.pop()
+        if val==None: break
+        time,action = val
+        state.clock = time
+        #print(time)
+        #if state.pc !=None:
+        action_name = action.get_action()
+        #print(action_name)
+        #print(state.pc)
+        log.append([state.clock,action_name,state.output_ch,action.get_page(),action.get_output_ch()])
+        action()
+        #seq.append((time,action.last_instr[1]))
+        i += 1
+
+    #print(i)
+    #for i in range(16,22):
+    #    print(state.register_file[3][i])
+
+    # JBK - the next line is part of saving output (in the old format).
+    # we need a separate save function in here.   The new format needs to also be collected
+    # and then saved in the new save function.
+
+    # print(state.register_file[3])
+    pd.DataFrame(log,columns=['Time','Instruction','Output Channel','Page','Channel No']).to_csv("test_dataframe.csv")
+
+    return (log, pulses, state)
+
+def simulate_from_asm(asm_file:str):
+    state=State(asm_file)
+    return simulate_run(state)
+
+def simulate(p):
+    p.retrieve_pulses = types.MethodType(retrieve_pulses, p)
+    #code = p.compile()
+    pulses = p.retrieve_pulses()
+    state=State(p)
+    return simulate_run(state,pulses=pulses)
+
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("You must give an asm file as an argument")
+        sys.exit(-1)
+
+    res = simulate_from_asm(sys.argv[1])
+    print(res)

@@ -1,6 +1,17 @@
 
 import types
+from typing import Any
+import sys
+import builtins
 # from types import MethodType
+
+def make_getattr():
+    #f = builtins.getattr
+    def __getattr__mine(name) -> Any:
+        print(f'my getattr {name}')
+        #return f(name)
+        return globals()[name]
+    return __getattr__mine
 
 # this is an example from the manual on what MethodType does
 class MethodType:
@@ -24,17 +35,23 @@ def dummy(obj,*args,**kwargs):
 # my dummy class used as the installed method
 class dummy2:
     def __call__(self,*args,**kwargs):
-        print("dummy2",self)
+        print("dummy2 call",self,args,kwargs)
+        return 0
     def __setattr__(self,name,value):
-        print("dummy2 setattr")
+        print("dummy2 setattr",name)
         setattr(self,name,value)
+    def __getattr__(self,name):
+        print("dummy2 getattr",name)
+        return 1
 
 # the class that is used to stand in for anything
 class Dummy:
 
     def __init__(self):
-        self.boo = 12
-        self.dumb = dummy2()
+        pass
+        #self.boo = 12
+        self.__dumb = dummy2()
+        self.__dict = dict()
 
     def __set_name__(self, owner, name):
         print("F setname")
@@ -48,14 +65,36 @@ class Dummy:
         return types.MethodType(self, obj)
 
     def __getattr__(self,name):
-        print("gettattr",name)
+        print("Dummy gettattr",name)
         #x = types.MethodType(dummy, self)
-        setattr(self,name, self.dumb) #x)
-        return self.dumb
+        setattr(self,name, self.__dumb) #x)
+        return self.__dumb
 
     def g__getattribute__(self,name):
         print("gettattribute",name)
         return types.MethodType(dummy, self)
+
+    def __getitem__(self, key):
+        return self.__dict.get(key, 0)
+
+    def __setitem__(self, key,value):
+        self.__dict[key] = value
+
+#sys.modules[__name__] = Dummy()
+oldgetattr = builtins.getattr
+newgetattr = make_getattr()
+builtins.__getattr__=newgetattr
+#builtins.getattr=newgetattr
+
+
+def withit(df, *args, **kwargs):
+    pass
+
+df = 10
+
+withit(df, a)
+
+
 
 # try it out
 if __name__ == "__main__":
@@ -71,3 +110,4 @@ if __name__ == "__main__":
     f.val = 5
     print(f.val)
     print(f.__dict__)
+    q=p

@@ -91,6 +91,8 @@ class AveragerProgram(QickProgram):
         
         
         #Configure the readout down converters
+        # JBK
+        print(type(soc))
         for readout,adc_freq in zip(soc.readouts,self.cfg["adc_freqs"]):
             readout.set_out(sel="product")
             readout.set_freq(adc_freq)
@@ -297,7 +299,9 @@ class AveragerProgram(QickProgram):
                 
             return np.array([di_avg0,dq_avg0])/soft_avgs,np.array([di_avg1,dq_avg1])/soft_avgs
         except:
-            return pulses
+            print("AveragerProgram: GOT EXCEPTION, pulses placed in self.sim_pulses")
+            self.sim_pulses = pulses
+            return np.ones(5),np.ones(5) # pulses,0
     
 class RAveragerProgram(QickProgram):
     """
