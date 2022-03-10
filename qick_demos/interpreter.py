@@ -51,7 +51,9 @@ class State:
             use_me = [mybin(i) for i in p]
 
         self.use_me = use_me
-        #print(use_me)
+        nchans = 8
+        nregs = 32
+        memsize = 2**16
 
         self.clock=0
         self.offset=0
@@ -59,29 +61,35 @@ class State:
         self.queue = Queue()
         self.instructions = []
         self.timed_instructions = []
-        self.stack = [[] for _ in range(8)]
-        self.register_file = np.zeros((8,32)) 
+        self.stack = [[] for _ in range(nchans)]
+        self.register_file = np.zeros((nchans,nregs),dtype=np.int32) 
         self.ext_port=[]
-        # JBK - there needs to be one mem block per channel
-        self.data_mem = np.empty(2**16)
-        self.output_ch = [[] for _ in range(8)] # channels, stack, memory, registers, etc.
+        # JBK - there may need to be one mem block per channel
+        self.data_mem = np.zeros(memsize,dtype=np.int32)
+        self.output_ch = [[] for _ in range(nchans)] # channels, stack, memory, registers, etc.
+
+        # these look like class-level data
         qp = qick_asm.QickProgram()
         self.codes = { v['bin']:(k,v['type']) for k,v in qp.instructions.items() }
         self.disp = { 'I':self.decode_I, 'J1':self.decode_J, 'R':self.decode_R, 'J2':self.decode_J }
 
-        # JBK - fix the next loop so it works with the list of machine instructions
+        # new logged items
+        self.reg_state = []
+        self.mem_changes = []
+        self.inst_log = []
+
+        # JBK - fixed the next loop so it works with the list of machine instructions
         for i,inst in enumerate(use_me):
-            #print(inst,type(inst))
             word = int(inst,2)
             opcode = (word>>56)&0xff
             name = self.codes[opcode][0]
             typ = self.codes[opcode][1]
+            #print(inst,type(inst))
             #print(opcode,name,typ,word)
             self.instructions.append([i,opcode,name,typ,self.disp[typ](word)])
             
-            if name == 'set':
-                #print(self.disp[typ](word))
-                pass
+            #if name == 'set':
+            #   print(self.disp[typ](word))
 
         #for inst in self.instructions:
         #    print(inst)
@@ -99,7 +107,6 @@ class State:
         rc   = ((word>>31)&0b11111)
         #junk = ((word>>16)&0b1111111111111111)
         imm  = ((word>>0)&0b11111111111111111111111111111111)
-
 
         return {'page':page,'ch':ch,'oper':oper,'ra':ra,'rb':rb,'rc':rc,'imm':imm}
 
@@ -135,8 +142,17 @@ class TimedAction:
         self.data = instr[1]
         self.state=state
         self.last_instr = instr
+        self.instr = instr[2]
 
     def __call__(self):
+        state = self.state        
+        instr = self.instr
+        # print("inst = ",instr)
+        instr_args = instr
+        instr_name = self.oper
+        state.inst_log.append((state.clock, state.pc, instr_args['page'], 
+            instr_args.get('ch',None), instr_name, instr))
+
         if self.oper == 'seti':
             self.seti_now(self.data)
         elif self.oper == 'set':
@@ -183,18 +199,23 @@ class InstrAction:
         # Assumes that you will need the state to execute the instruction (memory, ports, channels, registers)
         # unsolved here: if the instruction is 'set' or similar timed instruction, care must be taken to 
         #   build a TimedAction for the queue and add it with the proper time
-        
+
+        # JBK - why would this happen?
         if self.state.pc == None:
             return 
+
+        state = self.state        
+        instr = state.instructions[state.pc]
+        instr_args = instr[4]
+        instr_name = instr[2]
+        state.inst_log.append((state.clock, state.pc, instr_args['page'], 
+            instr_args.get('ch',None), instr_name, instr_args))
+
         instr = self.state.instructions[self.state.pc]
-
         self.last_instr = instr
-
         self.functions[instr[2]][0](instr[4])
-
         pc=self.state.pc
-        
-        
+                
         self.state.pc+=1
         if self.state.pc < len(self.state.instructions):
             self.state.queue.push(self.cycles_for_instruction(instr), InstrAction(self.state))
@@ -226,7 +247,11 @@ class InstrAction:
     def reg_write(self,info,r,val):
         #print(info['page'])
         # JBK - this is where we can record the register transactions
-        self.state.register_file[info['page']][info[r]] = val
+        addr = info[r]
+        page = info['page']
+        self.state.register_file[page][addr] = val
+        # JBK - fix me!
+        self.state.reg_state.append([self.state.clock, self.state.pc, page,'A']+self.state.register_file[page].tolist())
 
     def pushi(self,info):
         self.state.stack[info['page']].append(self.reg_read(info,'ra'))
@@ -246,7 +271,8 @@ class InstrAction:
         data = [info['rb']]
         data.append(info['ch'])
         data.append(info['page'])
-        self.state.queue.push(self.state.offset+info['imm'], TimedAction(['seti',data], self.state))
+        
+        self.state.queue.push(self.state.offset+info['imm'], TimedAction(['seti',data,info], self.state))
 
     def synci(self,info):
         self.state.offset = self.state.offset + info['imm']
@@ -271,8 +297,11 @@ class InstrAction:
 
     def memwi(self,info):
         # JBK - this needs to be recorded as a memory transaction
-        self.state.data_mem[info['imm']] = self.reg_read(info,'ra')
-        
+        page = info['page']
+        addr = info['imm']
+        val = self.reg_read(info,'ra')
+        self.state.data_mem[addr] = val
+        self.state.mem_changes.append((self.state.clock, self.state.pc, page, addr, val))
 
     def regwi(self,info):
         #print(info['imm'])
@@ -311,7 +340,7 @@ class InstrAction:
         data.append(info['ch'])
         data.append(info['page'])
         #print(data)
-        self.state.queue.push(int(self.state.offset + self.reg_read(info,'rc')), TimedAction(['set', data], self.state))
+        self.state.queue.push(int(self.state.offset + self.reg_read(info,'rc')), TimedAction(['set', data,info], self.state))
 
     def sync(self,info):
         self.state.offset = self.state.offset + self.reg_read(info,'rc') - 1
@@ -338,8 +367,11 @@ class InstrAction:
     # JBK - is this one supposed to modify memory or just registers?
     def memw(self,info):
         # self.reg_write(info,'rb',self.reg_read(info,'ra'))
-        self.state.data_mem[self.reg_read(info,'rb')] = self.reg_read(info,'ra')
-
+        page = info['page']
+        addr = self.reg_read(info,'rb')
+        val = self.reg_read(info,'ra')
+        self.state.data_mem[addr] = val
+        self.state.mem_change.append((self.state.clock, self.state.pc, page, addr, val))
 
 def retrieve_pulses(self):
     pulses = []
@@ -370,14 +402,19 @@ def simulate_run(state, pulses=None):
     seq = []
     i = 0
     # print(state.register_file[3])
+    ninstrs = len(state.instructions)
+
+    # initialize memory with pulses
+
 
     while state.queue:
         #print(state.queue)
         val = state.queue.pop()
         if val==None: break
         time,action = val
+
         state.clock = time
-        #print(time)
+        #print(time, state.pc)
         #if state.pc !=None:
         action_name = action.get_action()
         #print(action_name)
@@ -398,7 +435,8 @@ def simulate_run(state, pulses=None):
     # print(state.register_file[3])
     pd.DataFrame(log,columns=['Time','Instruction','Output Channel','Page','Channel No']).to_csv("test_dataframe.csv")
 
-    return (log, pulses, state)
+    return {'oldlog':log, 'pulses':pulses, 'instruction_log':state.inst_log,
+     'mem_changes':state.mem_changes, 'reg_state':state.reg_state, 'state':state}
 
 def simulate_from_asm(asm_file:str):
     state=State(asm_file)
@@ -411,7 +449,29 @@ def simulate(p):
     state=State(p)
     return simulate_run(state,pulses=pulses)
 
+import csv
 
+def save_results(results, prefix):
+    pulses = results['pulses']
+    inst_log = results['instruction_log']
+    mem_changes = results['mem_changes']
+    reg_state = results['reg_state']
+
+    with open(prefix+"_instruction_log.csv",'w') as f:
+        w = csv.writer(f)
+        w.writerow(['time','id','state','channel','oper','args'])
+        w.writerows(inst_log)
+
+    with open(prefix+"_memory_changes.csv",'w') as f:
+        w = csv.writer(f)
+        w.writerow(['time','id','page','addr','value'])
+        w.writerows(mem_changes)
+
+    with open(prefix+"_register_state.csv",'w') as f:
+        w = csv.writer(f)
+        head = ['time','id','page','state']+[f'r{i}' for i in list(range(32))]
+        w.writerow(head)
+        w.writerows(reg_state)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
