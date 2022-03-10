@@ -525,21 +525,21 @@ def read_results(prefix):
         r = csv.reader(f)
         header = next(r)
         for row in r:
-            reg_state.append([int(i) for i in row[0:3]])
+            reg_state.append([int(i) for i in row[0:3]]+[row[3]]+[int(i) for i in row[4:]])
 
     mem_changes=[]
     with open(name_mem_changes,'r') as f:
         r = csv.reader(f)
         header = next(r)
         for row in r:
-            reg_state.append([int(i) for i in row])
+            mem_changes.append([int(i) for i in row])
 
     inst_log=[]
     with open(name_inst_log,'r') as f:
         r = csv.reader(f)
         header = next(r)
         for row in r:
-            reg_state.append([int(i) for i in row[0:3]])
+            inst_log.append([int(i) for i in row[0:4]]+[row[4],row[5]])
 
     return {'pulses':pulses, 'reg_state':reg_state, 'instruction_log':inst_log,
         'mem_changes':mem_changes}
