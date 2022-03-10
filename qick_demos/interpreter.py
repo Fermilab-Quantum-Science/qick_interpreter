@@ -377,16 +377,17 @@ def retrieve_pulses(self):
     pulses = []
     for ch in self.channels.keys():
         for name,pulse in self.channels[ch]['pulses'].items():
-            #print("except pulses=",pulse)
+            # print("pulses=",pulse)
+            # entries contain: chan, style, addr, length, I, Q
             if pulse['style'] != 'const':
                 idata = pulse['idata'].astype(np.int16)
                 qdata = pulse['qdata'].astype(np.int16)
-                #print("idata=",idata)
-                #print("qdata=",qdata)
-                pulses.append([ch,pulse['style'],pulse['addr'], idata, qdata])
+                pulses.append([ch,pulse['style'],pulse['addr'],idata.size, idata, qdata])
             elif pulse['style'] == 'const':
-                length = pulse['length']
-                pulses.append([ch,pulse['style'],pulse['addr'],length])
+                leng = pulse['length']
+                idata=np.ones(leng,dtype=np.int16) * 2**16
+                qdata=np.zeros(leng,dtype=np.int16)                
+                pulses.append([ch,pulse['style'],pulse['addr'],leng])
     return pulses
 
 # I think Sim can just be a function that takes a program and produces the
@@ -405,7 +406,11 @@ def simulate_run(state, pulses=None):
     ninstrs = len(state.instructions)
 
     # initialize memory with pulses
-
+    if pulses:
+        for p in pulses:
+            leng = p[3]
+            addr = p[2]
+            state.data_mem[addr:addr+leng]=p[3]
 
     while state.queue:
         #print(state.queue)
@@ -482,20 +487,11 @@ def save_results(results, prefix):
 
         for r in pulses:
             pre=[r[0],r[1],r[2]]
-            if r[1]=='const':
-                leng=r[3]
-                I=np.ones(leng,dtype=np.int16) * 2**16
-                Q=np.zeros(leng,dtype=np.int16)
-            else:
-                leng=r[3].size
-                I=r[3]
-                Q=r[4]
-
-            I = base64.b64encode(I.tobytes())
-            Q = base64.b64encode(Q.tobytes())
+            leng=r[3]
+            I = base64.b64encode(r[4].tobytes())
+            Q = base64.b64encode(r[5].tobytes())
             row=pre + [leng,I.decode(),Q.decode()]
             w.writerow(row)
-
 
 def read_results(prefix):
     name_pulses = prefix+"_pulses.csv"
@@ -515,10 +511,7 @@ def read_results(prefix):
             Qbuf = base64.b64decode(Qbuf)
             I = np.ndarray(shape=leng,dtype=np.int16,buffer=Ibuf)
             Q = np.ndarray(shape=leng,dtype=np.int16,buffer=Qbuf)
-            if row[1] == 'const':
-                pulses.append([int(row[0]),row[1],int(row[2]),leng,0])
-            else:
-                pulses.append([int(row[0]),row[1],int(row[2]),leng,I,Q])
+            pulses.append([int(row[0]),row[1],int(row[2]),leng,I,Q])
 
     reg_state=[]
     with open(name_reg_state,'r') as f:
