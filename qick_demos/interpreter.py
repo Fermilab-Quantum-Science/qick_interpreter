@@ -209,7 +209,7 @@ class InstrAction:
         instr_args = instr[4]
         instr_name = instr[2]
         state.inst_log.append((state.clock, state.pc, instr_args['page'], 
-            instr_args.get('ch',None), instr_name, instr_args))
+            instr_args.get('ch',-1), instr_name, instr_args))
 
         instr = self.state.instructions[self.state.pc]
         self.last_instr = instr
@@ -450,6 +450,7 @@ def simulate(p):
     return simulate_run(state,pulses=pulses)
 
 import csv
+import base64
 
 def save_results(results, prefix):
     pulses = results['pulses']
@@ -459,7 +460,7 @@ def save_results(results, prefix):
 
     with open(prefix+"_instruction_log.csv",'w') as f:
         w = csv.writer(f)
-        w.writerow(['time','id','state','channel','oper','args'])
+        w.writerow(['time','id','page','channel','oper','args'])
         w.writerows(inst_log)
 
     with open(prefix+"_memory_changes.csv",'w') as f:
@@ -472,6 +473,76 @@ def save_results(results, prefix):
         head = ['time','id','page','state']+[f'r{i}' for i in list(range(32))]
         w.writerow(head)
         w.writerows(reg_state)
+
+    with open(prefix+"_pulses.csv",'w') as f:
+        w=csv.writer(f)
+        w.writerow(['channel','type','start','length','I','Q'])
+        I=None
+        Q=None
+
+        for r in pulses:
+            pre=[r[0],r[1],r[2]]
+            if r[1]=='const':
+                leng=r[3]
+                I=np.ones(leng,dtype=np.int16) * 2**16
+                Q=np.zeros(leng,dtype=np.int16)
+            else:
+                leng=r[3].size
+                I=r[3]
+                Q=r[4]
+
+            I = base64.b64encode(I.tobytes())
+            Q = base64.b64encode(Q.tobytes())
+            row=pre + [leng,I.decode(),Q.decode()]
+            w.writerow(row)
+
+
+def read_results(prefix):
+    name_pulses = prefix+"_pulses.csv"
+    name_reg_state = prefix+"_register_state.csv"
+    name_mem_changes = prefix+"_memory_changes.csv"
+    name_inst_log = prefix+"_instruction_log.csv"
+
+    pulses = []
+    with open(name_pulses,'r') as f:
+        r = csv.reader(f)
+        header = next(r)
+        for row in r:
+            Ibuf = row[4]
+            Qbuf = row[5]
+            leng = int(row[3])
+            Ibuf = base64.b64decode(Ibuf)
+            Qbuf = base64.b64decode(Qbuf)
+            I = np.ndarray(shape=leng,dtype=np.int16,buffer=Ibuf)
+            Q = np.ndarray(shape=leng,dtype=np.int16,buffer=Qbuf)
+            if row[1] == 'const':
+                pulses.append([int(row[0]),row[1],int(row[2]),leng,0])
+            else:
+                pulses.append([int(row[0]),row[1],int(row[2]),leng,I,Q])
+
+    reg_state=[]
+    with open(name_reg_state,'r') as f:
+        r = csv.reader(f)
+        header = next(r)
+        for row in r:
+            reg_state.append([int(i) for i in row[0:3]])
+
+    mem_changes=[]
+    with open(name_mem_changes,'r') as f:
+        r = csv.reader(f)
+        header = next(r)
+        for row in r:
+            reg_state.append([int(i) for i in row])
+
+    inst_log=[]
+    with open(name_inst_log,'r') as f:
+        r = csv.reader(f)
+        header = next(r)
+        for row in r:
+            reg_state.append([int(i) for i in row[0:3]])
+
+    return {'pulses':pulses, 'reg_state':reg_state, 'instruction_log':inst_log,
+        'mem_changes':mem_changes}
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
