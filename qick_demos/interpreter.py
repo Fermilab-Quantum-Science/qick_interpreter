@@ -143,6 +143,7 @@ class TimedAction:
         self.state=state
         self.last_instr = instr
         self.instr = instr[2]
+        print("TimedAction ctor", instr)
 
     def __call__(self):
         state = self.state        
@@ -171,13 +172,18 @@ class TimedAction:
         page = data.pop()
         ch = data.pop()
         #print(page)
-        self.state.output_ch[ch] = [self.state.register_file[page][data[0]]]
+        # JBK - I believe the reg values should be read when the instruction is 
+        # first encountered and not here.   I changed to the other method.
+        # self.state.output_ch[ch] = [self.state.register_file[page][data[0]]]
+        self.state.output_ch[ch] = [data[0]]
     
     def set_now(self,data):
         page = data.pop()
-        #print('appending')
         ch = data.pop()
-        out_data = [self.state.register_file[page][r] for r in data]
+        # JBK - I believe the reg values should be read when the instruction is 
+        # first encountered and not here.   I changed to the other method.
+        # out_data = [self.state.register_file[page][r] for r in data]
+        out_data = data
         #print(out_data)
         self.state.output_ch[ch] = out_data
  
@@ -206,16 +212,21 @@ class InstrAction:
 
         state = self.state        
         instr = state.instructions[state.pc]
+        self.last_instr = instr
+        used_reg_values = self.functions[instr[2]][0](instr[4])
+        pc=self.state.pc
+
+        # Important - note that the recording of the instruction
+        # is done after the execution.  Functions are required to 
+        # return register values that are used during execution.
+        # This is important especially for the delayed execution
+        # set instructions.
         instr_args = instr[4]
         instr_name = instr[2]
+        used_reg_values.update(instr_args)
         state.inst_log.append((state.clock, state.pc, instr_args['page'], 
-            instr_args.get('ch',-1), instr_name, instr_args))
+            instr_args.get('ch',-1), instr_name, used_reg_values))
 
-        instr = self.state.instructions[self.state.pc]
-        self.last_instr = instr
-        self.functions[instr[2]][0](instr[4])
-        pc=self.state.pc
-                
         self.state.pc+=1
         if self.state.pc < len(self.state.instructions):
             self.state.queue.push(self.cycles_for_instruction(instr), InstrAction(self.state))
@@ -254,34 +265,44 @@ class InstrAction:
         self.state.reg_state.append([self.state.clock, self.state.pc, page,'A']+self.state.register_file[page].tolist())
 
     def pushi(self,info):
-        self.state.stack[info['page']].append(self.reg_read(info,'ra'))
+        va = self.reg_read(info,'ra')
+        self.state.stack[info['page']].append(va)
         self.reg_write(info,'rb',info['imm'])
+        return {'va':va}
         
 
     def popi(self,info):
         self.reg_write(info,'ra',self.state.stack[info['page']].pop())
-        
+        va = self.reg_read(info,'ra')
+        return {'va':va}
 
     def mathi(self,info):
-        math_val = self.math_fcns[info['oper']](self.reg_read(info,'rb'),info['imm'])
+        vb = self.reg_read(info,'rb')
+        math_val = self.math_fcns[info['oper']](vb,info['imm'])
         self.reg_write(info,'ra',math_val)
-        
+        return {'vb':vb, 'va':math_val}
 
     def seti(self,info):
+        vb = self.reg_read(info,'rb')
         data = [info['rb']]
         data.append(info['ch'])
         data.append(info['page'])
-        
-        self.state.queue.push(self.state.offset+info['imm'], TimedAction(['seti',data,info], self.state))
+        r={'vb':vb}
+        arg=r.copy()
+        arg.update(info)
+        self.state.queue.push(self.state.offset+info['imm'], TimedAction(['seti',data,arg], self.state))
+        return r
 
     def synci(self,info):
         self.state.offset = self.state.offset + info['imm']
+        return {}
 
     def waiti(self,info):
         self.state.clock = self.state.clock + info['imm'] - 1
-        
+        return {}
 
     def bitwi(self,info):
+        vb = self.reg_read(info,'rb')
         imm = info['imm']
         if info['oper'] == 3:
             val = ~imm
@@ -289,24 +310,27 @@ class InstrAction:
             #print(reg_read(info,'rb'),imm)
             val = self.bitw_fcns[info['oper']](int(self.reg_read(info,'rb')),imm)
         self.reg_write(info,'ra',val)
+        return {'vb':vb, 'va':val}
         
 
     def memri(self,info):
         self.reg_write(info,'ra',self.state.data_mem[info['imm']])
-        
+        val = self.reg_read(info,'ra')
+        return {'va':val}
 
     def memwi(self,info):
-        # JBK - this needs to be recorded as a memory transaction
         page = info['page']
         addr = info['imm']
         val = self.reg_read(info,'ra')
         self.state.data_mem[addr] = val
         self.state.mem_changes.append((self.state.clock, self.state.pc, page, addr, val))
+        return {'va':val}
 
     def regwi(self,info):
         #print(info['imm'])
         self.reg_write(info,'ra',info['imm'])
-        
+        val = self.reg_read(info,'ra')
+        return {'va':val}
 
     def loopnz(self,info):
         counter = self.reg_read(info,'ra')
@@ -314,42 +338,55 @@ class InstrAction:
         if counter != 0:
             self.reg_write(info,'ra',counter - 1)
             self.state.pc = info['addr'] - 1
-
-
+        return {}
 
     def condj(self,info):
         #print(info)
         cond = self.comparison_fcns[info['oper']](self.reg_read(info,'ra'),self.reg_read(info,'rb'))
         if cond:
             self.state.pc = info['addr'] - 1
-
+        return {}
 
     def end(self,info):
         #print("Done")
-        pass
+        return {}
         
 
     def math(self,info):
-        math_val = self.math_fcns[info['oper']](self.reg_read(info,'rb'),self.reg_read(info,'rc'))
+        vb = self.reg_read(info,'rb')
+        vc = self.reg_read(info,'rc')
+        math_val = self.math_fcns[info['oper']](vb,vc)
         self.reg_write(info,'ra',math_val)
+        return {'va':math_val,'vb':vb,'vc':vc}
 
     def set(self,info):
         #print(info)
+        rt=self.reg_read(info,'rc')
         reads = ['rb','rd','re','rf','rg']
-        data = [info[r] for r in reads]
+        data = [self.reg_read(info,r) for r in reads]
+        r = {'va':data[0],'vb':data[1],'vc':data[2],'vd':data[3],'ve':data[4],'vt':rt}
         data.append(info['ch'])
         data.append(info['page'])
         #print(data)
-        self.state.queue.push(int(self.state.offset + self.reg_read(info,'rc')), TimedAction(['set', data,info], self.state))
+        arg=r.copy()
+        arg.update(info)
+        self.state.queue.push(int(self.state.offset + rt), TimedAction(['set', data,arg], self.state))
+        return r
 
     def sync(self,info):
-        self.state.offset = self.state.offset + self.reg_read(info,'rc') - 1
+        vc=self.reg_read(info,'rc')
+        self.state.offset = self.state.offset + vc - 1
+        return {'vc':vc}
 
     def read(self,info):
-        self.reg_write(info,'ra',self.state.ext_port.pop())
+        val=self.state.ext_port.pop()
+        self.reg_write(info,'ra',val)
+        return {'va':val}
 
     def wait(self,info):
-        self.state.clock = self.state.clock + self.reg_read(info,'rc')
+        vc=self.reg_read(info,'rc')
+        self.state.clock = self.state.clock + vc
+        return {'vc':vc}
 
     def bitw(self,info):
         rb = self.reg_read(info,'rb')
@@ -359,10 +396,14 @@ class InstrAction:
         else:
             val = self.bitw_fcns[info['oper']](rb,rc)
         self.reg_write(info,'ra',val)
+        return {'va':val,'vb':rb,'vc':rc}
 
     def memr(self,info):
         # self.reg_write(info,'ra',self.reg_read(info,'rb'))
-        self.reg_write(info,self.state.data_mem[self.reg_read(info,'rb')])
+        rb=self.reg_read(info,'rb')
+        val=self.state.data_mem[rb]
+        self.reg_write(info,'ra',val)
+        return {'vb':rb,'va':val}
 
     # JBK - is this one supposed to modify memory or just registers?
     def memw(self,info):
@@ -372,6 +413,7 @@ class InstrAction:
         val = self.reg_read(info,'ra')
         self.state.data_mem[addr] = val
         self.state.mem_change.append((self.state.clock, self.state.pc, page, addr, val))
+        return {'vb':addr,'va':val}
 
 def retrieve_pulses(self):
     pulses = []
