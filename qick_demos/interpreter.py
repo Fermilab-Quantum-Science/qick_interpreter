@@ -143,7 +143,7 @@ class TimedAction:
         self.state=state
         self.last_instr = instr
         self.instr = instr[2]
-        print("TimedAction ctor", instr)
+        # print("TimedAction ctor", instr)
 
     def __call__(self):
         state = self.state        
