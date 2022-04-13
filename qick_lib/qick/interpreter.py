@@ -416,6 +416,11 @@ class InstrAction:
         return {'vb':addr,'va':val}
 
 def retrieve_pulses(self):
+    """
+    This function is patched into the QickProgram during a call to simulate so
+    that added pulse information can be readily retrieved without running the
+    program on the board.
+    """
     pulses = []
     for ch in self.channels.keys():
         for name,pulse in self.channels[ch]['pulses'].items():
@@ -486,10 +491,23 @@ def simulate_run(state, pulses=None):
      'mem_changes':state.mem_changes, 'reg_state':state.reg_state, 'state':state}
 
 def simulate_from_asm(asm_file:str):
+    """
+    Internal function.
+    """
     state=State(asm_file)
     return simulate_run(state)
 
 def simulate(p):
+    """
+    Run the simulator on QICK program p.
+
+    Example: 
+    prog3 = LoopbackProgram(config)
+    results = simulate(prog3)
+
+    :param p: QICK program to operate on
+    :type p: QickProgram
+    """
     p.retrieve_pulses = types.MethodType(retrieve_pulses, p)
     #code = p.compile()
     pulses = p.retrieve_pulses()
@@ -500,6 +518,20 @@ import csv
 import base64
 
 def save_results(results, prefix):
+    """
+    Save the results from a simulation run to a set of files with given prefix.
+
+    Example: 
+    prog3 = LoopbackProgram(config)
+    results = simulate(prog3)
+    save_results(results,"MyRun_")
+
+    :param results: object returned from call to simulate()
+    :type results: dict, with specific keys for each of the simulator outputs
+    :param prefix: Text that is added to the front of all the saved data from results
+    :type prefix: string
+    """
+
     pulses = results['pulses']
     inst_log = results['instruction_log']
     mem_changes = results['mem_changes']
@@ -536,6 +568,19 @@ def save_results(results, prefix):
             w.writerow(row)
 
 def read_results(prefix):
+    """
+    Read previously saved results from a simulation run.
+
+    Example: 
+    prog3 = LoopbackProgram(config)
+    results = simulate(prog3)
+    save_results(results,"MyRun_")
+    restored = read_results("MyRun_")
+
+    :param prefix: Text that is used to find all the files associated with a previous save
+    :type prefix: string
+    """
+
     name_pulses = prefix+"_pulses.csv"
     name_reg_state = prefix+"_register_state.csv"
     name_mem_changes = prefix+"_memory_changes.csv"
@@ -580,9 +625,7 @@ def read_results(prefix):
         'mem_changes':mem_changes}
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("You must give an asm file as an argument")
-        sys.exit(-1)
+    #if len(sys.argv) < 2:
+    print("The interpreter only supports use as a library.")
+    sys.exit(-1)
 
-    res = simulate_from_asm(sys.argv[1])
-    print(res)
