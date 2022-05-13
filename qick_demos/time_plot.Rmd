@@ -1,0 +1,18 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+prefix<-"Loop3_"
+instr<-read.csv(paste(prefix,"instruction_log.csv",sep=''),header=TRUE)
+pulse<-read.csv(paste(prefix,"pulses.csv",sep=''),header=TRUE)
+mem<-read.csv(paste(prefix,"memory_changes.csv",sep=''),header=TRUE)
+regs<-read.csv(paste(prefix,"register_state.csv",sep=''),header=TRUE)
+```
+
+
